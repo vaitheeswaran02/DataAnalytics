@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nuclear Power Plant & Reactor Core Simulator</title>
+  <style>
+    :root {
+      --bg: #070d18;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --core-glow: #22c55e;
+      --heat-color: #f97316;
+      --steam-color: #e2e8f0;
+      --power-color: #f43f5e;
+      --voltage-color: #34d399;
+      --scram-red: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #22c55e, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-family: monospace;
+    }
+
+    /* Simulation Viewport */
+    .viewport-card {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border);
+      background: #020617;
+    }
+
+    canvas#simCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Telemetry HUD Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .stat-card.v-card::after { background: var(--voltage-color); }
+    .stat-card.p-card::after { background: var(--power-color); }
+    .stat-card.t-card::after { background: var(--heat-color); }
+    .stat-card.c-card::after { background: var(--core-glow); }
+
+    .stat-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 1.65rem;
+      font-weight: 800;
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.voltage { color: var(--voltage-color); }
+    .stat-value.power { color: var(--power-color); }
+    .stat-value.temp { color: var(--heat-color); }
+    .stat-value.flux { color: var(--core-glow); }
+
+    /* Dashboard Split */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 860px) {
+      .dashboard-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .control-header span:last-child {
+      color: var(--accent);
+      font-family: monospace;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+    }
+
+    .btn-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: #334155;
+    }
+
+    button.scram-btn {
+      background: #dc2626;
+      border-color: #ef4444;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+    }
+
+    button.scram-btn:hover {
+      background: #b91c1c;
+    }
+
+    /* Live Scope Canvas */
+    .graph-container {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      border-radius: 8px;
+      background: #070a12;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    canvas#graphCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PWR Nuclear Reactor & Steam Turbine Simulator</h1>
+      <span class="status-badge" id="plantStatus">STATUS: CRITICAL / STEADY STATE</span>
+    </header>
+
+    <!-- Canvas Simulation Viewport -->
+    <div class="viewport-card">
+      <canvas id="simCanvas"></canvas>
+    </div>
+
+    <!-- Live Telemetry Readouts -->
+    <div class="telemetry-grid">
+      <div class="stat-card v-card">
+        <span class="stat-title">Generator Output Voltage</span>
+        <span class="stat-value voltage" id="voltageDisplay">0.00 kV</span>
+      </div>
+      <div class="stat-card p-card">
+        <span class="stat-title">Net Electric Power</span>
+        <span class="stat-value power" id="powerDisplay">0 MW</span>
+      </div>
+      <div class="stat-card t-card">
+        <span class="stat-title">Core Temperature</span>
+        <span class="stat-value temp" id="tempDisplay">315 °C</span>
+      </div>
+      <div class="stat-card c-card">
+        <span class="stat-title">Neutron Flux / Fission Rate</span>
+        <span class="stat-value flux" id="fluxDisplay">100%</span>
+      </div>
+    </div>
+
+    <!-- Controls & Real-Time Graph -->
+    <div class="dashboard-split">
+      <div class="panel-card">
+        <!-- Control Rod Position -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Control Rods Insertion (0% = Full Power, 100% = Subcritical)</span>
+            <span id="rodVal">25%</span>
+          </div>
+          <input type="range" id="rodSlider" min="0" max="100" value="25" step="1" />
+        </div>
+
+        <!-- Primary Coolant Flow -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Primary Coolant Pump Flow Rate</span>
+            <span id="pumpVal">100%</span>
+          </div>
+          <input type="range" id="pumpSlider" min="20" max="120" value="100" step="1" />
+        </div>
+
+        <!-- Operational Presets & Emergency SCRAM -->
+        <div class="control-group">
+          <div class="control-header"><span>Reactor Operations</span></div>
+          <div class="btn-wrap">
+            <button onclick="setReactorState(25, 100)">100% Base Load</button>
+            <button onclick="setReactorState(55, 90)">50% Load Follow</button>
+            <button onclick="setReactorState(82, 70)">Hot Standby (10%)</button>
+            <button class="scram-btn" onclick="triggerScram()">EMERGENCY SCRAM</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Graph Card -->
+      <div class="panel-card">
+        <div class="control-header">
+          <span>Real-time Reactor Dynamics Oscillogram</span>
+          <span style="font-size:0.75rem; color:#94a3b8;">
+            <span style="color:var(--voltage-color)">― kV</span> &nbsp;
+            <span style="color:var(--power-color)">― MW</span> &nbsp;
+            <span style="color:var(--heat-color)">― Temp (°C)</span>
+          </span>
+        </div>
+        <div class="graph-container">
+          <canvas id="graphCanvas"></canvas>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Reactor Physics:</strong> Point reactor kinetics model with negative Doppler temperature coefficient $\alpha_T = -3.2 \times 10^{-5} \Delta k/k/^\circ\text{C}$ and Rankine cycle thermodynamic efficiency $\eta_{th} \approx 34\%$.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const simCanvas = document.getElementById('simCanvas');
+    const sCtx = simCanvas.getContext('2d');
+    const graphCanvas = document.getElementById('graphCanvas');
+    const gCtx = graphCanvas.getContext('2d');
+
+    // UI Elements
+    const rodSlider = document.getElementById('rodSlider');
+    const rodVal = document.getElementById('rodVal');
+    const pumpSlider = document.getElementById('pumpSlider');
+    const pumpVal = document.getElementById('pumpVal');
+
+    const voltageDisplay = document.getElementById('voltageDisplay');
+    const powerDisplay = document.getElementById('powerDisplay');
+    const tempDisplay = document.getElementById('tempDisplay');
+    const fluxDisplay = document.getElementById('fluxDisplay');
+    const plantStatus = document.getElementById('plantStatus');
+
+    // Reactor Constants
+    const NOMINAL_MW_TH = 3200; // 3200 MW Thermal
+    const THERMAL_EFFICIENCY = 0.345; // 34.5% Rankine Efficiency -> ~1100 MWe
+    const NOMINAL_VOLTAGE = 22.0; // 22 kV Generator
+    const AMBIENT_TEMP = 285; // °C cold leg inlet
+
+    // Dynamic Variables
+    let rodInsertion = 25; // 0% = full out, 100% = fully inserted
+    let pumpFlow = 100;    // %
+    let coreTemp = 315;    // °C
+    let neutronFlux = 100; // %
+    let turbineAngle = 0;
+
+    let smoothV = 0, smoothP = 0, smoothTemp = 315, smoothFlux = 100;
+
+    // Steam Vapor Particles (Cooling Tower)
+    const vaporParticles = [];
+    for (let i = 0; i < 40; i++) {
+      vaporParticles.push({
+        x: (Math.random() - 0.5) * 35,
+        y: Math.random() * -60,
+        radius: Math.random() * 8 + 4,
+        speedY: Math.random() * 0.8 + 0.4,
+        alpha: Math.random() * 0.6 + 0.2
+      });
+    }
+
+    // Secondary Loop Steam Bubbles
+    const steamLoopParticles = [];
+    for (let i = 0; i < 35; i++) {
+      steamLoopParticles.push({
+        progress: Math.random(),
+        speed: 0.008 + Math.random() * 0.006
+      });
+    }
+
+    // Oscillogram Historical Buffer
+    const historyData = [];
+    const maxHistoryPoints = 120;
+
+    function resizeCanvases() {
+      const sRect = simCanvas.getBoundingClientRect();
+      simCanvas.width = sRect.width * window.devicePixelRatio;
+      simCanvas.height = sRect.height * window.devicePixelRatio;
+      sCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const gRect = graphCanvas.getBoundingClientRect();
+      graphCanvas.width = gRect.width * window.devicePixelRatio;
+      graphCanvas.height = gRect.height * window.devicePixelRatio;
+      gCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvases);
+    resizeCanvases();
+
+    // Event Handlers
+    rodSlider.addEventListener('input', (e) => {
+      rodInsertion = parseFloat(e.target.value);
+      rodVal.textContent = `${Math.round(rodInsertion)}%`;
+    });
+
+    pumpSlider.addEventListener('input', (e) => {
+      pumpFlow = parseFloat(e.target.value);
+      pumpVal.textContent = `${Math.round(pumpFlow)}%`;
+    });
+
+    window.setReactorState = function(r, p) {
+      rodInsertion = r;
+      pumpFlow = p;
+      rodSlider.value = r;
+      rodVal.textContent = `${r}%`;
+      pumpSlider.value = p;
+      pumpVal.textContent = `${p}%`;
+    };
+
+    window.triggerScram = function() {
+      rodInsertion = 100;
+      rodSlider.value = 100;
+      rodVal.textContent = '100%';
+    };
+
+    // Reactor Kinetics & Thermal Hydraulics Calculation
+    function calculateReactorPhysics() {
+      // 1. Reactivity balance: insertion drives subcritical/supercritical
+      const controlReactivity = (100 - rodInsertion) / 75; // ~1.0 at 25% insertion
+      const targetFlux = Math.max(0, controlReactivity * 100);
+
+      // Inertial drift towards target flux
+      neutronFlux += (targetFlux - neutronFlux) * 0.05;
+
+      // 2. Core Thermal Balance
+      const heatGeneration = (neutronFlux / 100) * NOMINAL_MW_TH;
+      const heatRemoval = (pumpFlow / 100) * ((coreTemp - AMBIENT_TEMP) / 30) * NOMINAL_MW_TH;
+      
+      coreTemp += (heatGeneration - heatRemoval) * 0.0012;
+      coreTemp = Math.max(280, Math.min(350, coreTemp));
+
+      // 3. Electrical Power Generation: P_e = Thermal Power * Rankine Efficiency
+      const effectiveThermalPower = heatGeneration * Math.max(0, (coreTemp - 290) / 25);
+      const electricPowerMW = (effectiveThermalPower * THERMAL_EFFICIENCY);
+
+      // 4. Synchronous Generator Voltage
+      const voltageKV = electricPowerMW > 10 ? NOMINAL_VOLTAGE * (0.88 + 0.12 * Math.min(1.0, electricPowerMW / 1100)) : 0;
+
+      // Operational Status
+      let state = 'CRITICAL / STEADY STATE';
+      if (rodInsertion >= 95) {
+        state = 'SCRAM SHUTDOWN (DECAY HEAT)';
+      } else if (coreTemp > 335) {
+        state = 'HIGH TEMPERATURE WARNING';
+      } else if (neutronFlux < 15) {
+        state = 'HOT STANDBY';
+      }
+
+      return {
+        electricPowerMW,
+        voltageKV,
+        coreTemp,
+        neutronFlux,
+        state
+      };
+    }
+
+    let wirePulseOffset = 0;
+    let primaryLoopOffset = 0;
+
+    // Simulation Render Loop
+    function render() {
+      const w = simCanvas.width / window.devicePixelRatio;
+      const h = simCanvas.height / window.devicePixelRatio;
+
+      const metrics = calculateReactorPhysics();
+
+      // Smooth Value Interpolations
+      smoothV += (metrics.voltageKV - smoothV) * 0.08;
+      smoothP += (metrics.electricPowerMW - smoothP) * 0.08;
+      smoothTemp += (metrics.coreTemp - smoothTemp) * 0.08;
+      smoothFlux += (metrics.neutronFlux - smoothFlux) * 0.08;
+
+      turbineAngle += (smoothP / 1100) * 0.25;
+
+      // UI Telemetry
+      voltageDisplay.textContent = `${smoothV.toFixed(2)} kV`;
+      powerDisplay.textContent = `${Math.round(smoothP)} MW`;
+      tempDisplay.textContent = `${smoothTemp.toFixed(1)} °C`;
+      fluxDisplay.textContent = `${Math.round(smoothFlux)}%`;
+
+      plantStatus.textContent = `STATUS: ${metrics.state}`;
+      if (metrics.state.includes('SCRAM')) {
+        plantStatus.style.color = '#ef4444';
+      } else if (metrics.state.includes('WARNING')) {
+        plantStatus.style.color = '#f97316';
+      } else {
+        plantStatus.style.color = '#34d399';
+      }
+
+      // 1. Sky & Background Containment Hall
+      const skyGrad = sCtx.createLinearGradient(0, 0, 0, h);
+      skyGrad.addColorStop(0, '#060b14');
+      skyGrad.addColorStop(1, '#0f172a');
+      sCtx.fillStyle = skyGrad;
+      sCtx.fillRect(0, 0, w, h);
+
+      const groundY = h * 0.86;
+
+      // 2. Concrete Reactor Containment Dome (Left Building)
+      const domeCenterX = w * 0.24;
+      const domeBaseY = groundY;
+      const domeRadius = 75;
+
+      sCtx.fillStyle = '#334155';
+      sCtx.beginPath();
+      sCtx.arc(domeCenterX, domeBaseY - 100, domeRadius, Math.PI, 0);
+      sCtx.lineTo(domeCenterX + domeRadius, domeBaseY);
+      sCtx.lineTo(domeCenterX - domeRadius, domeBaseY);
+      sCtx.closePath();
+      sCtx.fill();
+      sCtx.strokeStyle = '#475569';
+      sCtx.lineWidth = 4;
+      sCtx.stroke();
+
+      // 3. Reactor Pressure Vessel (RPV)
+      const rpvX = domeCenterX - 30;
+      const rpvY = domeBaseY - 110;
+      const rpvW = 44;
+      const rpvH = 80;
+
+      sCtx.fillStyle = '#1e293b';
+      sCtx.beginPath();
+      sCtx.roundRect(rpvX, rpvY, rpvW, rpvH, 12);
+      sCtx.fill();
+      sCtx.strokeStyle = '#64748b';
+      sCtx.lineWidth = 2.5;
+      sCtx.stroke();
+
+      // Uranium Fuel Assemblies Glow (Cherenkov radiation / fission effect)
+      if (smoothFlux > 2) {
+        const glowRadius = 24;
+        const glowGrad = sCtx.createRadialGradient(rpvX + rpvW/2, rpvY + 50, 4, rpvX + rpvW/2, rpvY + 50, glowRadius);
+        const glowAlpha = Math.min(0.9, (smoothFlux / 100));
+        glowGrad.addColorStop(0, `rgba(34, 197, 94, ${glowAlpha})`);
+        glowGrad.addColorStop(0.6, `rgba(56, 189, 248, ${glowAlpha * 0.5})`);
+        glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        sCtx.fillStyle = glowGrad;
+        sCtx.fillRect(rpvX + 4, rpvY + 25, rpvW - 8, 48);
+      }
+
+      // Fuel Rod Bundles (Grid)
+      sCtx.fillStyle = '#0f172a';
+      for (let rx = rpvX + 10; rx <= rpvX + rpvW - 14; rx += 8) {
+        sCtx.fillRect(rx, rpvY + 30, 4, 38);
+      }
+
+      // Movable Control Rods (Positioned from top into core)
+      const rodTopY = rpvY + 4;
+      const rodTravel = (rodInsertion / 100) * 34;
+      sCtx.fillStyle = '#94a3b8';
+      for (let rx = rpvX + 8; rx <= rpvX + rpvW - 12; rx += 8) {
+        sCtx.fillRect(rx, rodTopY + rodTravel, 2.5, 30);
+      }
+
+      // Control Rod Drive Mechanism (CRDM) Housing on top
+      sCtx.fillStyle = '#64748b';
+      sCtx.fillRect(rpvX + 6, rpvY - 14, rpvW - 12, 14);
+
+      // 4. Steam Generator (SG)
+      const sgX = domeCenterX + 28;
+      const sgY = domeBaseY - 120;
+      const sgW = 32;
+      const sgH = 92;
+
+      sCtx.fillStyle = '#1e293b';
+      sCtx.beginPath();
+      sCtx.roundRect(sgX, sgY, sgW, sgH, 10);
+      sCtx.fill();
+      sCtx.strokeStyle = '#64748b';
+      sCtx.lineWidth = 2;
+      sCtx.stroke();
+
+      // 5. Primary Coolant Loop (RPV <-> Steam Generator)
+      primaryLoopOffset = (primaryLoopOffset + (pumpFlow / 100) * 1.5) % 16;
+
+      // Hot Leg Pipe (RPV to SG)
+      sCtx.strokeStyle = '#f97316';
+      sCtx.lineWidth = 5;
+      sCtx.beginPath();
+      sCtx.moveTo(rpvX + rpvW, rpvY + 35);
+      sCtx.lineTo(sgX, rpvY + 35);
+      sCtx.stroke();
+
+      // Cold Leg Pipe (SG back to RPV via pump)
+      sCtx.strokeStyle = '#0284c7';
+      sCtx.lineWidth = 5;
+      sCtx.beginPath();
+      sCtx.moveTo(sgX, rpvY + 65);
+      sCtx.lineTo(rpvX + rpvW, rpvY + 65);
+      sCtx.stroke();
+
+      // 6. Secondary Steam Line & Steam Turbine Hall (Center-Right)
+      const turbineHallX = w * 0.52;
+      const turbineY = groundY - 40;
+
+      // Steam Pipe from SG to Turbine
+      sCtx.strokeStyle = '#e2e8f0';
+      sCtx.lineWidth = 4;
+      sCtx.beginPath();
+      sCtx.moveTo(sgX + sgW, sgY + 15);
+      sCtx.lineTo(turbineHallX, sgY + 15);
+      sCtx.lineTo(turbineHallX, turbineY - 15);
+      sCtx.stroke();
+
+      // Turbine Enclosure
+      sCtx.fillStyle = '#334155';
+      sCtx.beginPath();
+      sCtx.roundRect(turbineHallX - 10, turbineY - 25, 75, 45, 6);
+      sCtx.fill();
+
+      // Spinning Turbine Rotor & Shaft
+      sCtx.save();
+      sCtx.translate(turbineHallX + 16, turbineY - 2);
+      sCtx.rotate(turbineAngle);
+      sCtx.fillStyle = '#94a3b8';
+      for (let i = 0; i < 4; i++) {
+        sCtx.rotate(Math.PI / 2);
+        sCtx.fillRect(-3, -12, 6, 24);
+      }
+      sCtx.restore();
+
+      // Electric Generator Block (Synchronous Alternator)
+      sCtx.fillStyle = '#0f172a';
+      sCtx.fillRect(turbineHallX + 38, turbineY - 18, 22, 32);
+      sCtx.fillStyle = '#38bdf8';
+      sCtx.fillRect(turbineHallX + 42, turbineY - 14, 14, 10);
+
+      // 7. Hyperbolic Cooling Tower (Right Building)
+      const towerBaseX = w * 0.82;
+      const towerBaseY = groundY;
+      const towerTopY = groundY - 150;
+
+      // Hyperbolic Tower Silhouette
+      sCtx.fillStyle = '#1e293b';
+      sCtx.beginPath();
+      sCtx.moveTo(towerBaseX - 45, towerBaseY);
+      sCtx.quadraticCurveTo(towerBaseX - 18, (towerBaseY + towerTopY) / 2, towerBaseX - 30, towerTopY);
+      sCtx.lineTo(towerBaseX + 30, towerTopY);
+      sCtx.quadraticCurveTo(towerBaseX + 18, (towerBaseY + towerTopY) / 2, towerBaseX + 45, towerBaseY);
+      sCtx.closePath();
+      sCtx.fill();
+      sCtx.strokeStyle = '#475569';
+      sCtx.lineWidth = 2;
+      sCtx.stroke();
+
+      // Cooling Tower Vapor Plume
+      if (smoothP > 50) {
+        const vaporDensity = (smoothP / 1100);
+        vaporParticles.forEach(vp => {
+          vp.y -= vp.speedY;
+          if (vp.y < -110) {
+            vp.y = 0;
+            vp.x = (Math.random() - 0.5) * 35;
+          }
+
+          sCtx.fillStyle = `rgba(226, 232, 240, ${vp.alpha * vaporDensity * 0.45})`;
+          sCtx.beginPath();
+          sCtx.arc(towerBaseX + vp.x, towerTopY + vp.y, vp.radius, 0, Math.PI * 2);
+          sCtx.fill();
+        });
+      }
+
+      // 8. Condenser Water Loop between Turbine & Cooling Tower
+      sCtx.strokeStyle = '#0284c7';
+      sCtx.lineWidth = 3;
+      sCtx.beginPath();
+      sCtx.moveTo(turbineHallX + 25, groundY - 5);
+      sCtx.lineTo(towerBaseX - 35, groundY - 5);
+      sCtx.stroke();
+
+      // 9. Ground Foundation
+      sCtx.fillStyle = '#0f172a';
+      sCtx.fillRect(0, groundY, w, h - groundY);
+
+      // 10. High-Voltage Transmission Substation & Electric Pulses
+      const subX = w * 0.68;
+      const subY = groundY - 55;
+
+      // Transformer Box
+      sCtx.fillStyle = '#475569';
+      sCtx.fillRect(subX - 12, groundY - 30, 24, 30);
+
+      // High-voltage Pylon
+      sCtx.strokeStyle = '#94a3b8';
+      sCtx.lineWidth = 2;
+      sCtx.beginPath();
+      sCtx.moveTo(subX, groundY);
+      sCtx.lineTo(subX, subY);
+      sCtx.lineTo(subX - 14, subY + 16);
+      sCtx.lineTo(subX + 14, subY + 16);
+      sCtx.lineTo(subX, subY);
+      sCtx.stroke();
+
+      // Power Line
+      sCtx.strokeStyle = '#1e293b';
+      sCtx.lineWidth = 3;
+      sCtx.beginPath();
+      sCtx.moveTo(turbineHallX + 50, turbineY - 18);
+      sCtx.lineTo(subX, subY + 10);
+      sCtx.lineTo(w, subY + 10);
+      sCtx.stroke();
+
+      if (smoothP > 5) {
+        wirePulseOffset = (wirePulseOffset + smoothP * 0.008 + 1.2) % 18;
+        sCtx.strokeStyle = '#34d399';
+        sCtx.lineWidth = 2.2;
+        sCtx.setLineDash([5, 8]);
+        sCtx.lineDashOffset = -wirePulseOffset;
+        sCtx.beginPath();
+        sCtx.moveTo(turbineHallX + 50, turbineY - 18);
+        sCtx.lineTo(subX, subY + 10);
+        sCtx.lineTo(w, subY + 10);
+        sCtx.stroke();
+        sCtx.setLineDash([]);
+      }
+
+      // 11. Record Oscillogram History
+      if (historyData.length > maxHistoryPoints) historyData.shift();
+      historyData.push({
+        v: smoothV / NOMINAL_VOLTAGE,
+        p: Math.min(1.0, smoothP / 1200),
+        t: (smoothTemp - 280) / 70
+      });
+
+      renderGraph();
+      requestAnimationFrame(render);
+    }
+
+    // Oscilloscope Graph Rendering
+    function renderGraph() {
+      const gw = graphCanvas.width / window.devicePixelRatio;
+      const gh = graphCanvas.height / window.devicePixelRatio;
+
+      gCtx.clearRect(0, 0, gw, gh);
+
+      // Horizontal Grid lines
+      gCtx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      gCtx.lineWidth = 1;
+      for (let y = 0.25; y < 1; y += 0.25) {
+        gCtx.beginPath();
+        gCtx.moveTo(0, gh * y);
+        gCtx.lineTo(gw, gh * y);
+        gCtx.stroke();
+      }
+
+      function drawTrace(key, color) {
+        gCtx.strokeStyle = color;
+        gCtx.lineWidth = 2;
+        gCtx.beginPath();
+        historyData.forEach((d, idx) => {
+          const gx = (idx / (maxHistoryPoints - 1)) * gw;
+          const gy = gh - d[key] * (gh - 12) - 6;
+          if (idx === 0) gCtx.moveTo(gx, gy);
+          else gCtx.lineTo(gx, gy);
+        });
+        gCtx.stroke();
+      }
+
+      drawTrace('t', '#f97316'); // Core Temp (°C)
+      drawTrace('p', '#f43f5e'); // Electric Power (MW)
+      drawTrace('v', '#34d399'); // Voltage (kV)
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
