@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wind Turbine Aerodynamics & Power Simulation</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(18, 26, 43, 0.88);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --wind-color: #67e8f9;
+      --power-color: #f43f5e;
+      --voltage-color: #34d399;
+      --rpm-color: #fbbf24;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #67e8f9, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-family: monospace;
+    }
+
+    /* Simulation Canvas */
+    .viewport-card {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border);
+      background: #020617;
+    }
+
+    canvas#simCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Telemetry HUD Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .stat-card.v-card::after { background: var(--voltage-color); }
+    .stat-card.p-card::after { background: var(--power-color); }
+    .stat-card.r-card::after { background: var(--rpm-color); }
+    .stat-card.w-card::after { background: var(--wind-color); }
+
+    .stat-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 1.65rem;
+      font-weight: 800;
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.voltage { color: var(--voltage-color); }
+    .stat-value.power { color: var(--power-color); }
+    .stat-value.rpm { color: var(--rpm-color); }
+    .stat-value.wind { color: var(--wind-color); }
+
+    /* Dashboard Split */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 860px) {
+      .dashboard-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .control-header span:last-child {
+      color: var(--accent);
+      font-family: monospace;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+    }
+
+    .btn-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: #334155;
+    }
+
+    button.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+
+    /* Live Scope Canvas */
+    .graph-container {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      border-radius: 8px;
+      background: #070a12;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    canvas#graphCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Wind Turbine & Aerodynamic Power Simulator</h1>
+      <span class="status-badge" id="turbineStatus">STATUS: GENERATING</span>
+    </header>
+
+    <!-- Canvas Simulation Area -->
+    <div class="viewport-card">
+      <canvas id="simCanvas"></canvas>
+    </div>
+
+    <!-- Live Telemetry Readouts -->
+    <div class="telemetry-grid">
+      <div class="stat-card v-card">
+        <span class="stat-title">Generator Voltage</span>
+        <span class="stat-value voltage" id="voltageDisplay">0.00 V</span>
+      </div>
+      <div class="stat-card p-card">
+        <span class="stat-title">Electric Power</span>
+        <span class="stat-value power" id="powerDisplay">0.00 kW</span>
+      </div>
+      <div class="stat-card r-card">
+        <span class="stat-title">Rotor Speed</span>
+        <span class="stat-value rpm" id="rpmDisplay">0.0 RPM</span>
+      </div>
+      <div class="stat-card w-card">
+        <span class="stat-title">Effective Wind Speed</span>
+        <span class="stat-value wind" id="windSpeedDisplay">0.0 m/s</span>
+      </div>
+    </div>
+
+    <!-- Controls & Oscillogram Split -->
+    <div class="dashboard-split">
+      <div class="panel-card">
+        <!-- Air Speed -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Wind / Air Speed</span>
+            <span id="windSpeedVal">12.0 m/s</span>
+          </div>
+          <input type="range" id="windSpeedSlider" min="0" max="30" value="12" step="0.2" />
+        </div>
+
+        <!-- Blade / Turbine Length -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Rotor Blade Length (Radius)</span>
+            <span id="bladeLengthVal">45 m</span>
+          </div>
+          <input type="range" id="bladeLengthSlider" min="15" max="85" value="45" step="1" />
+        </div>
+
+        <!-- Tower Height -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Tower Fixed Height</span>
+            <span id="towerHeightVal">80 m</span>
+          </div>
+          <input type="range" id="towerHeightSlider" min="40" max="150" value="80" step="1" />
+        </div>
+
+        <!-- Preset Wind Conditions -->
+        <div class="control-group">
+          <div class="control-header"><span>Wind Speed Presets</span></div>
+          <div class="btn-wrap">
+            <button onclick="setWind(0)">Calm (0 m/s)</button>
+            <button onclick="setWind(4.5)">Cut-in (4.5 m/s)</button>
+            <button onclick="setWind(12)">Rated (12 m/s)</button>
+            <button onclick="setWind(26)">Cut-out/Brake (26 m/s)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Graph Card -->
+      <div class="panel-card">
+        <div class="control-header">
+          <span>Real-time Telemetry Oscillogram</span>
+          <span style="font-size:0.75rem; color:#94a3b8;">
+            <span style="color:var(--voltage-color)">― V</span> &nbsp;
+            <span style="color:var(--power-color)">― kW</span> &nbsp;
+            <span style="color:var(--rpm-color)">― RPM</span>
+          </span>
+        </div>
+        <div class="graph-container">
+          <canvas id="graphCanvas"></canvas>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Aerodynamic Model:</strong> Calculates kinetic power using $P = \frac{1}{2} \rho A v^3 C_p$ with atmospheric boundary layer wind shear scaling with tower height: $v(h) = v_0 (h / h_0)^\alpha$.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const simCanvas = document.getElementById('simCanvas');
+    const sCtx = simCanvas.getContext('2d');
+    const graphCanvas = document.getElementById('graphCanvas');
+    const gCtx = graphCanvas.getContext('2d');
+
+    // UI elements
+    const windSpeedSlider = document.getElementById('windSpeedSlider');
+    const windSpeedVal = document.getElementById('windSpeedVal');
+    const bladeLengthSlider = document.getElementById('bladeLengthSlider');
+    const bladeLengthVal = document.getElementById('bladeLengthVal');
+    const towerHeightSlider = document.getElementById('towerHeightSlider');
+    const towerHeightVal = document.getElementById('towerHeightVal');
+
+    const voltageDisplay = document.getElementById('voltageDisplay');
+    const powerDisplay = document.getElementById('powerDisplay');
+    const rpmDisplay = document.getElementById('rpmDisplay');
+    const windSpeedDisplay = document.getElementById('windSpeedDisplay');
+    const turbineStatus = document.getElementById('turbineStatus');
+
+    // Simulation Parameters
+    let baseWindSpeed = 12.0;   // m/s
+    let bladeLength = 45;       // meters
+    let towerHeight = 80;       // meters
+
+    const AIR_DENSITY = 1.225;  // kg/m³
+    const BETZ_CP = 0.44;       // Power coefficient
+    const GENERATOR_EFF = 0.92;
+    const CUT_IN_SPEED = 3.5;   // m/s
+    const RATED_SPEED = 13.0;   // m/s
+    const CUT_OUT_SPEED = 25.0; // m/s
+    const MAX_VOLTAGE = 690;    // Standard 690V AC generation
+
+    let rotorAngle = 0;
+    let currentRPM = 0;
+    let smoothV = 0, smoothP = 0, smoothRPM = 0;
+
+    // Wind Stream Vectors
+    const windParticles = [];
+    for (let i = 0; i < 90; i++) {
+      windParticles.push({
+        x: Math.random() * 1000,
+        y: Math.random() * 400,
+        length: 20 + Math.random() * 40,
+        speedFactor: 0.8 + Math.random() * 0.4,
+        alpha: 0.2 + Math.random() * 0.4
+      });
+    }
+
+    // Oscillogram history
+    const historyData = [];
+    const maxHistoryPoints = 120;
+
+    function resizeCanvases() {
+      const sRect = simCanvas.getBoundingClientRect();
+      simCanvas.width = sRect.width * window.devicePixelRatio;
+      simCanvas.height = sRect.height * window.devicePixelRatio;
+      sCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const gRect = graphCanvas.getBoundingClientRect();
+      graphCanvas.width = gRect.width * window.devicePixelRatio;
+      graphCanvas.height = gRect.height * window.devicePixelRatio;
+      gCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvases);
+    resizeCanvases();
+
+    // Event Listeners
+    windSpeedSlider.addEventListener('input', (e) => {
+      baseWindSpeed = parseFloat(e.target.value);
+      windSpeedVal.textContent = `${baseWindSpeed.toFixed(1)} m/s`;
+    });
+
+    bladeLengthSlider.addEventListener('input', (e) => {
+      bladeLength = parseFloat(e.target.value);
+      bladeLengthVal.textContent = `${bladeLength} m`;
+    });
+
+    towerHeightSlider.addEventListener('input', (e) => {
+      towerHeight = parseFloat(e.target.value);
+      towerHeightVal.textContent = `${towerHeight} m`;
+    });
+
+    window.setWind = function(v) {
+      baseWindSpeed = v;
+      windSpeedSlider.value = v;
+      windSpeedVal.textContent = `${v.toFixed(1)} m/s`;
+    };
+
+    // Aerodynamics & Power Calculation
+    function calculateTurbinePhysics() {
+      // 1. Wind Shear: Wind increases at higher altitudes: v = v0 * (h / 10)^0.143
+      const shearFactor = Math.pow(towerHeight / 10, 0.143) / Math.pow(80 / 10, 0.143);
+      const hubWindSpeed = baseWindSpeed * shearFactor;
+
+      // 2. Operational state conditions
+      let state = 'GENERATING';
+      let targetRPM = 0;
+      let powerKW = 0;
+      let voltage = 0;
+
+      if (hubWindSpeed < CUT_IN_SPEED) {
+        state = 'BELOW CUT-IN';
+        targetRPM = hubWindSpeed * 1.5;
+        voltage = targetRPM * 8;
+        powerKW = 0;
+      } else if (hubWindSpeed > CUT_OUT_SPEED) {
+        state = 'CUT-OUT (BRAKED)';
+        targetRPM = 0;
+        voltage = 0;
+        powerKW = 0;
+      } else {
+        // Swept Area: A = π * r²
+        const sweptArea = Math.PI * Math.pow(bladeLength, 2);
+
+        // Max aerodynamic power: P = 0.5 * rho * A * v^3 * Cp
+        const effectiveSpeed = Math.min(hubWindSpeed, RATED_SPEED);
+        const rawPowerWatts = 0.5 * AIR_DENSITY * sweptArea * Math.pow(effectiveSpeed, 3) * BETZ_CP * GENERATOR_EFF;
+        powerKW = rawPowerWatts / 1000;
+
+        // Rotor Tip-Speed Ratio (TSR = omega * R / v ≈ 7.5)
+        const optimalTSR = 7.5;
+        const radPerSec = (optimalTSR * effectiveSpeed) / bladeLength;
+        targetRPM = (radPerSec * 60) / (2 * Math.PI);
+
+        // Voltage scaling
+        const voltageRatio = Math.min(1.0, hubWindSpeed / RATED_SPEED);
+        voltage = MAX_VOLTAGE * (0.85 + 0.15 * voltageRatio);
+
+        if (hubWindSpeed >= RATED_SPEED) {
+          state = 'RATED CAPACITY';
+        }
+      }
+
+      return {
+        state,
+        hubWindSpeed,
+        targetRPM,
+        powerKW,
+        voltage
+      };
+    }
+
+    // Render Turbine Blade in 2D perspective
+    function drawBlade(ctx, lengthPx, angle) {
+      ctx.save();
+      ctx.rotate(angle);
+
+      // Blade airfoil shape
+      ctx.fillStyle = '#e2e8f0';
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = 6;
+
+      ctx.beginPath();
+      ctx.moveTo(0, -lengthPx * 0.05);
+      ctx.quadraticCurveTo(lengthPx * 0.08, -lengthPx * 0.35, lengthPx * 0.04, -lengthPx);
+      ctx.quadraticCurveTo(0, -lengthPx * 0.98, -lengthPx * 0.03, -lengthPx * 0.35);
+      ctx.closePath();
+      ctx.fill();
+
+      // Leading edge red warning stripe
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(-lengthPx * 0.025, -lengthPx, lengthPx * 0.05, lengthPx * 0.15);
+
+      ctx.restore();
+    }
+
+    let wirePulse = 0;
+
+    // Simulation Loop
+    function render() {
+      const w = simCanvas.width / window.devicePixelRatio;
+      const h = simCanvas.height / window.devicePixelRatio;
+
+      const physics = calculateTurbinePhysics();
+
+      // Smooth interpolations
+      currentRPM += (physics.targetRPM - currentRPM) * 0.04;
+      smoothV += (physics.voltage - smoothV) * 0.08;
+      smoothP += (physics.powerKW - smoothP) * 0.08;
+      smoothRPM += (physics.targetRPM - smoothRPM) * 0.08;
+
+      // Update rotation angle
+      rotorAngle += (currentRPM * 6) * (Math.PI / 180) * 0.016;
+
+      // Update UI Telemetry
+      voltageDisplay.textContent = `${smoothV.toFixed(1)} V`;
+      powerDisplay.textContent = `${smoothP.toFixed(1)} kW`;
+      rpmDisplay.textContent = `${smoothRPM.toFixed(1)} RPM`;
+      windSpeedDisplay.textContent = `${physics.hubWindSpeed.toFixed(1)} m/s`;
+
+      turbineStatus.textContent = `STATUS: ${physics.state}`;
+      if (physics.state === 'CUT-OUT (BRAKED)') {
+        turbineStatus.style.color = '#f43f5e';
+      } else if (physics.state === 'RATED CAPACITY') {
+        turbineStatus.style.color = '#38bdf8';
+      } else {
+        turbineStatus.style.color = '#34d399';
+      }
+
+      // 1. Draw Sky Background
+      const skyGrad = sCtx.createLinearGradient(0, 0, 0, h);
+      skyGrad.addColorStop(0, '#0c1a30');
+      skyGrad.addColorStop(0.6, '#1e293b');
+      skyGrad.addColorStop(1, '#334155');
+      sCtx.fillStyle = skyGrad;
+      sCtx.fillRect(0, 0, w, h);
+
+      // 2. Draw Animated Wind Stream Vectors
+      sCtx.lineWidth = 1.5;
+      windParticles.forEach(p => {
+        p.x += (physics.hubWindSpeed * 0.7 + 1.2) * p.speedFactor;
+        if (p.x > w + 60) {
+          p.x = -60;
+          p.y = Math.random() * (h * 0.75);
+        }
+
+        sCtx.strokeStyle = `rgba(103, 232, 249, ${p.alpha * Math.min(1, physics.hubWindSpeed / 10)})`;
+        sCtx.beginPath();
+        sCtx.moveTo(p.x, p.y);
+        sCtx.lineTo(p.x + p.length * (physics.hubWindSpeed / 15 + 0.3), p.y);
+        sCtx.stroke();
+      });
+
+      // 3. Ground / Horizon
+      const groundY = h * 0.82;
+      const groundGrad = sCtx.createLinearGradient(0, groundY, 0, h);
+      groundGrad.addColorStop(0, '#166534');
+      groundGrad.addColorStop(1, '#052e16');
+      sCtx.fillStyle = groundGrad;
+      sCtx.fillRect(0, groundY, w, h - groundY);
+
+      // Ground shadow
+      const hubX = w * 0.48;
+      const pixelTowerHeight = (towerHeight / 150) * (h * 0.52);
+      const hubY = groundY - pixelTowerHeight;
+      const pixelBladeLength = (bladeLength / 85) * (h * 0.32);
+
+      sCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      sCtx.beginPath();
+      sCtx.ellipse(hubX, groundY + 8, 50, 8, 0, 0, Math.PI * 2);
+      sCtx.fill();
+
+      // 4. Draw Tower
+      sCtx.fillStyle = '#94a3b8';
+      sCtx.beginPath();
+      sCtx.moveTo(hubX - 10, groundY);
+      sCtx.lineTo(hubX - 5, hubY);
+      sCtx.lineTo(hubX + 5, hubY);
+      sCtx.lineTo(hubX + 10, groundY);
+      sCtx.closePath();
+      sCtx.fill();
+
+      // Nacelle (Generator Housing)
+      sCtx.fillStyle = '#cbd5e1';
+      sCtx.beginPath();
+      sCtx.roundRect(hubX - 18, hubY - 8, 36, 16, 6);
+      sCtx.fill();
+
+      // 5. Draw Swept Area Disc (Ghosted circle indicating blade range)
+      sCtx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      sCtx.lineWidth = 1;
+      sCtx.beginPath();
+      sCtx.arc(hubX, hubY, pixelBladeLength, 0, Math.PI * 2);
+      sCtx.stroke();
+
+      // 6. Draw 3 Rotor Blades
+      sCtx.save();
+      sCtx.translate(hubX, hubY);
+
+      for (let i = 0; i < 3; i++) {
+        const bladeAngle = rotorAngle + (i * 2 * Math.PI) / 3;
+        drawBlade(sCtx, pixelBladeLength, bladeAngle);
+      }
+
+      // Rotor Hub Cap
+      sCtx.fillStyle = '#0f172a';
+      sCtx.beginPath();
+      sCtx.arc(0, 0, 8, 0, Math.PI * 2);
+      sCtx.fill();
+
+      sCtx.fillStyle = '#38bdf8';
+      sCtx.beginPath();
+      sCtx.arc(0, 0, 4, 0, Math.PI * 2);
+      sCtx.fill();
+
+      sCtx.restore();
+
+      // 7. Output Transmission Line & Electric Pulses
+      sCtx.strokeStyle = '#1e293b';
+      sCtx.lineWidth = 4;
+      sCtx.beginPath();
+      sCtx.moveTo(hubX + 8, groundY);
+      sCtx.lineTo(hubX + 80, groundY + 15);
+      sCtx.lineTo(hubX + 220, groundY + 15);
+      sCtx.stroke();
+
+      if (smoothP > 5) {
+        wirePulse = (wirePulse + smoothP * 0.005 + 1) % 20;
+        sCtx.strokeStyle = '#34d399';
+        sCtx.lineWidth = 2.5;
+        sCtx.setLineDash([6, 10]);
+        sCtx.lineDashOffset = -wirePulse;
+        sCtx.beginPath();
+        sCtx.moveTo(hubX + 8, groundY);
+        sCtx.lineTo(hubX + 80, groundY + 15);
+        sCtx.lineTo(hubX + 220, groundY + 15);
+        sCtx.stroke();
+        sCtx.setLineDash([]);
+      }
+
+      // 8. Update Oscillogram Data
+      if (historyData.length > maxHistoryPoints) historyData.shift();
+      historyData.push({
+        v: smoothV / MAX_VOLTAGE,
+        p: Math.min(1.0, smoothP / 3500),
+        rpm: Math.min(1.0, smoothRPM / 30)
+      });
+
+      renderGraph();
+      requestAnimationFrame(render);
+    }
+
+    // Oscilloscope Graph Rendering
+    function renderGraph() {
+      const gw = graphCanvas.width / window.devicePixelRatio;
+      const gh = graphCanvas.height / window.devicePixelRatio;
+
+      gCtx.clearRect(0, 0, gw, gh);
+
+      // Grid Lines
+      gCtx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      gCtx.lineWidth = 1;
+      for (let y = 0.25; y < 1; y += 0.25) {
+        gCtx.beginPath();
+        gCtx.moveTo(0, gh * y);
+        gCtx.lineTo(gw, gh * y);
+        gCtx.stroke();
+      }
+
+      function drawTrace(key, color) {
+        gCtx.strokeStyle = color;
+        gCtx.lineWidth = 2;
+        gCtx.beginPath();
+        historyData.forEach((d, idx) => {
+          const gx = (idx / (maxHistoryPoints - 1)) * gw;
+          const gy = gh - d[key] * (gh - 12) - 6;
+          if (idx === 0) gCtx.moveTo(gx, gy);
+          else gCtx.lineTo(gx, gy);
+        });
+        gCtx.stroke();
+      }
+
+      drawTrace('rpm', '#fbbf24');  // RPM
+      drawTrace('p', '#f43f5e');    // Power kW
+      drawTrace('v', '#34d399');    // Voltage V
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
