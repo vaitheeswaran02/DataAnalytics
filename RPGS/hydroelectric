@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hydroelectric Dam & Water Current Power Simulator</title>
+  <style>
+    :root {
+      --bg: #070d18;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --water-cyan: #0284c7;
+      --water-stream: #38bdf8;
+      --power-color: #f43f5e;
+      --voltage-color: #34d399;
+      --head-gold: #fbbf24;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-family: monospace;
+    }
+
+    /* Simulation Viewport */
+    .viewport-card {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border);
+      background: #020617;
+    }
+
+    canvas#simCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Telemetry HUD Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .stat-card.v-card::after { background: var(--voltage-color); }
+    .stat-card.p-card::after { background: var(--power-color); }
+    .stat-card.w-card::after { background: var(--water-stream); }
+    .stat-card.h-card::after { background: var(--head-gold); }
+
+    .stat-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 1.65rem;
+      font-weight: 800;
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.voltage { color: var(--voltage-color); }
+    .stat-value.power { color: var(--power-color); }
+    .stat-value.flow { color: var(--water-stream); }
+    .stat-value.head { color: var(--head-gold); }
+
+    /* Dashboard Controls Split */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 860px) {
+      .dashboard-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .control-header span:last-child {
+      color: var(--accent);
+      font-family: monospace;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+    }
+
+    .btn-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: #334155;
+    }
+
+    /* Live Scope Canvas */
+    .graph-container {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      border-radius: 8px;
+      background: #070a12;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    canvas#graphCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Hydroelectric Dam & Water Current Simulator</h1>
+      <span class="status-badge" id="hydroStatus">STATUS: ACTIVE GENERATION</span>
+    </header>
+
+    <!-- Canvas Simulation Area -->
+    <div class="viewport-card">
+      <canvas id="simCanvas"></canvas>
+    </div>
+
+    <!-- Live Telemetry Readouts -->
+    <div class="telemetry-grid">
+      <div class="stat-card v-card">
+        <span class="stat-title">Generator Output Voltage</span>
+        <span class="stat-value voltage" id="voltageDisplay">0.00 kV</span>
+      </div>
+      <div class="stat-card p-card">
+        <span class="stat-title">Generated Power</span>
+        <span class="stat-value power" id="powerDisplay">0.00 MW</span>
+      </div>
+      <div class="stat-card w-card">
+        <span class="stat-title">Penstock Water Flow (Q)</span>
+        <span class="stat-value flow" id="flowDisplay">0.0 m³/s</span>
+      </div>
+      <div class="stat-card h-card">
+        <span class="stat-title">Hydraulic Head Height (H)</span>
+        <span class="stat-value head" id="headDisplay">80 m</span>
+      </div>
+    </div>
+
+    <!-- Controls & Real-Time Graph -->
+    <div class="dashboard-split">
+      <div class="panel-card">
+        <!-- Hydraulic Head Height -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Reservoir Head Height (H)</span>
+            <span id="headVal">80 m</span>
+          </div>
+          <input type="range" id="headSlider" min="20" max="150" value="80" step="1" />
+        </div>
+
+        <!-- Sluice Gate / Flow Rate -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Sluice Gate Opening / Flow Rate (Q)</span>
+            <span id="flowSliderVal">65 m³/s</span>
+          </div>
+          <input type="range" id="flowSlider" min="0" max="120" value="65" step="1" />
+        </div>
+
+        <!-- Turbine / Generator Efficiency -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Turbine-Generator Efficiency (η)</span>
+            <span id="effVal">90%</span>
+          </div>
+          <input type="range" id="effSlider" min="60" max="95" value="90" step="1" />
+        </div>
+
+        <!-- Dam Flow Presets -->
+        <div class="control-group">
+          <div class="control-header"><span>Operating Presets</span></div>
+          <div class="btn-wrap">
+            <button onclick="setOperatingState(40, 0)">Gate Closed (0 m³/s)</button>
+            <button onclick="setOperatingState(60, 35)">Base Load (35 m³/s)</button>
+            <button onclick="setOperatingState(100, 85)">Peak Demand (85 m³/s)</button>
+            <button onclick="setOperatingState(140, 120)">Maximum Capacity (120 m³/s)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Graph Card -->
+      <div class="panel-card">
+        <div class="control-header">
+          <span>Real-time Hydro Power Oscillogram</span>
+          <span style="font-size:0.75rem; color:#94a3b8;">
+            <span style="color:var(--voltage-color)">― kV</span> &nbsp;
+            <span style="color:var(--power-color)">― MW</span> &nbsp;
+            <span style="color:var(--water-stream)">― Q (m³/s)</span>
+          </span>
+        </div>
+        <div class="graph-container">
+          <canvas id="graphCanvas"></canvas>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Hydro Physics:</strong> Power calculated using $P = \eta \cdot \rho \cdot g \cdot Q \cdot H$, with penstock Torricelli flow velocity $v = \sqrt{2gH}$ driving a Francis hydro turbine.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const simCanvas = document.getElementById('simCanvas');
+    const sCtx = simCanvas.getContext('2d');
+    const graphCanvas = document.getElementById('graphCanvas');
+    const gCtx = graphCanvas.getContext('2d');
+
+    // UI Elements
+    const headSlider = document.getElementById('headSlider');
+    const headVal = document.getElementById('headVal');
+    const flowSlider = document.getElementById('flowSlider');
+    const flowSliderVal = document.getElementById('flowSliderVal');
+    const effSlider = document.getElementById('effSlider');
+    const effVal = document.getElementById('effVal');
+
+    const voltageDisplay = document.getElementById('voltageDisplay');
+    const powerDisplay = document.getElementById('powerDisplay');
+    const flowDisplay = document.getElementById('flowDisplay');
+    const headDisplay = document.getElementById('headDisplay');
+    const hydroStatus = document.getElementById('hydroStatus');
+
+    // Simulation Physics Constants
+    const WATER_DENSITY = 1000; // kg/m³
+    const GRAVITY = 9.81;       // m/s²
+    const NOMINAL_VOLTAGE = 13.8; // 13.8 kV Hydro Generator Standard
+
+    // Adjustable States
+    let headHeight = 80;   // meters
+    let flowRate = 65;     // m³/s
+    let efficiency = 0.90; // 90%
+
+    let turbineAngle = 0;
+    let smoothV = 0, smoothP = 0, smoothQ = 0;
+
+    // Animated Penstock Water Current Particles
+    const penstockParticles = [];
+    for (let i = 0; i < 45; i++) {
+      penstockParticles.push({
+        progress: Math.random(),
+        speed: 0.005 + Math.random() * 0.005,
+        offsetY: (Math.random() - 0.5) * 14
+      });
+    }
+
+    // Downstream Tailrace Foam Bubbles
+    const tailraceBubbles = [];
+    for (let i = 0; i < 50; i++) {
+      tailraceBubbles.push({
+        x: Math.random() * 400,
+        y: Math.random() * 50,
+        radius: Math.random() * 3.5 + 1,
+        speed: Math.random() * 2 + 1,
+        alpha: Math.random() * 0.7 + 0.3
+      });
+    }
+
+    // Oscillogram historical buffer
+    const historyData = [];
+    const maxHistoryPoints = 120;
+
+    function resizeCanvases() {
+      const sRect = simCanvas.getBoundingClientRect();
+      simCanvas.width = sRect.width * window.devicePixelRatio;
+      simCanvas.height = sRect.height * window.devicePixelRatio;
+      sCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const gRect = graphCanvas.getBoundingClientRect();
+      graphCanvas.width = gRect.width * window.devicePixelRatio;
+      graphCanvas.height = gRect.height * window.devicePixelRatio;
+      gCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvases);
+    resizeCanvases();
+
+    // Event Handlers
+    headSlider.addEventListener('input', (e) => {
+      headHeight = parseFloat(e.target.value);
+      headVal.textContent = `${headHeight} m`;
+    });
+
+    flowSlider.addEventListener('input', (e) => {
+      flowRate = parseFloat(e.target.value);
+      flowSliderVal.textContent = `${flowRate} m³/s`;
+    });
+
+    effSlider.addEventListener('input', (e) => {
+      const effPercent = parseFloat(e.target.value);
+      efficiency = effPercent / 100;
+      effVal.textContent = `${effPercent}%`;
+    });
+
+    window.setOperatingState = function(h, q) {
+      headHeight = h;
+      flowRate = q;
+      headSlider.value = h;
+      headVal.textContent = `${h} m`;
+      flowSlider.value = q;
+      flowSliderVal.textContent = `${q} m³/s`;
+    };
+
+    // Calculate Hydroelectric Energy Metrics
+    function calculateHydroPhysics() {
+      // 1. Torricelli Jet Velocity: v = sqrt(2 * g * H)
+      const waterVelocity = Math.sqrt(2 * GRAVITY * headHeight);
+
+      // 2. Power Output Equation: P = eta * rho * g * Q * H (Watts)
+      const powerWatts = efficiency * WATER_DENSITY * GRAVITY * flowRate * headHeight;
+      const powerMW = powerWatts / 1_000_000;
+
+      // 3. Grid Voltage (Synchronous Generator Dynamics)
+      let voltageKV = 0;
+      let turbineRPM = 0;
+
+      if (flowRate > 1) {
+        turbineRPM = (waterVelocity * 4.5) * (flowRate / 120);
+        voltageKV = NOMINAL_VOLTAGE * Math.min(1.0, 0.75 + 0.25 * (flowRate / 60));
+      }
+
+      return {
+        powerMW,
+        voltageKV,
+        waterVelocity,
+        turbineRPM
+      };
+    }
+
+    let wireOffset = 0;
+
+    // Main Simulation Loop
+    function render() {
+      const w = simCanvas.width / window.devicePixelRatio;
+      const h = simCanvas.height / window.devicePixelRatio;
+
+      const metrics = calculateHydroPhysics();
+
+      // Smooth Value Interpolations
+      smoothV += (metrics.voltageKV - smoothV) * 0.08;
+      smoothP += (metrics.powerMW - smoothP) * 0.08;
+      smoothQ += (flowRate - smoothQ) * 0.08;
+
+      turbineAngle += (metrics.turbineRPM * 0.01);
+
+      // UI Displays
+      voltageDisplay.textContent = `${smoothV.toFixed(2)} kV`;
+      powerDisplay.textContent = `${smoothP.toFixed(2)} MW`;
+      flowDisplay.textContent = `${smoothQ.toFixed(1)} m³/s`;
+      headDisplay.textContent = `${headHeight} m`;
+
+      if (smoothP > 80) {
+        hydroStatus.textContent = 'STATUS: MAXIMUM PEAK GENERATION';
+        hydroStatus.style.color = '#38bdf8';
+      } else if (smoothP > 2) {
+        hydroStatus.textContent = 'STATUS: ACTIVE GENERATION';
+        hydroStatus.style.color = '#34d399';
+      } else {
+        hydroStatus.textContent = 'STATUS: GATE CLOSED / IDLE';
+        hydroStatus.style.color = '#94a3b8';
+      }
+
+      // 1. Draw Sky & Mountain Landscape
+      const skyGrad = sCtx.createLinearGradient(0, 0, 0, h * 0.5);
+      skyGrad.addColorStop(0, '#0c1a30');
+      skyGrad.addColorStop(1, '#1e293b');
+      sCtx.fillStyle = skyGrad;
+      sCtx.fillRect(0, 0, w, h);
+
+      // Mountain Ridges
+      sCtx.fillStyle = '#0f172a';
+      sCtx.beginPath();
+      sCtx.moveTo(0, h * 0.45);
+      sCtx.lineTo(w * 0.25, h * 0.2);
+      sCtx.lineTo(w * 0.55, h * 0.48);
+      sCtx.lineTo(w, h * 0.28);
+      sCtx.lineTo(w, h);
+      sCtx.lineTo(0, h);
+      sCtx.fill();
+
+      // 2. Concrete Gravity Dam Geometry
+      const damTopX = w * 0.35;
+      const damBaseLeftX = w * 0.28;
+      const damBaseRightX = w * 0.65;
+      const groundY = h * 0.88;
+      const damTopY = h * 0.22;
+
+      // Concrete Dam Face
+      const damGrad = sCtx.createLinearGradient(damTopX, damTopY, damBaseRightX, groundY);
+      damGrad.addColorStop(0, '#64748b');
+      damGrad.addColorStop(0.5, '#475569');
+      damGrad.addColorStop(1, '#334155');
+      sCtx.fillStyle = damGrad;
+
+      sCtx.beginPath();
+      sCtx.moveTo(damBaseLeftX, groundY);
+      sCtx.lineTo(damBaseLeftX, damTopY);
+      sCtx.lineTo(damTopX + 25, damTopY);
+      sCtx.lineTo(damBaseRightX, groundY);
+      sCtx.closePath();
+      sCtx.fill();
+
+      // Dam Top Roadway / Crest
+      sCtx.fillStyle = '#94a3b8';
+      sCtx.fillRect(damBaseLeftX - 10, damTopY - 8, damTopX - damBaseLeftX + 40, 8);
+
+      // 3. Upstream Reservoir Water
+      // Water level scales dynamically with Reservoir Head Height
+      const reservoirLevelY = damTopY + (150 - headHeight) * 0.85;
+      
+      const waterGrad = sCtx.createLinearGradient(0, reservoirLevelY, 0, groundY);
+      waterGrad.addColorStop(0, 'rgba(14, 165, 233, 0.75)');
+      waterGrad.addColorStop(0.5, 'rgba(2, 132, 199, 0.85)');
+      waterGrad.addColorStop(1, 'rgba(3, 105, 161, 0.95)');
+      sCtx.fillStyle = waterGrad;
+
+      sCtx.beginPath();
+      sCtx.moveTo(0, groundY);
+      sCtx.lineTo(0, reservoirLevelY);
+      sCtx.lineTo(damBaseLeftX, reservoirLevelY);
+      sCtx.lineTo(damBaseLeftX, groundY);
+      sCtx.closePath();
+      sCtx.fill();
+
+      // Water Surface Waves
+      sCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      sCtx.fillRect(0, reservoirLevelY - 2, damBaseLeftX, 3);
+
+      // 4. Penstock Conduit & High-Pressure Water Current
+      const penstockStartX = damBaseLeftX;
+      const penstockStartY = reservoirLevelY + (groundY - reservoirLevelY) * 0.55;
+      const powerhouseX = w * 0.58;
+      const powerhouseY = groundY - 32;
+
+      // Pipe Outer Casing (Steel Conduit)
+      sCtx.strokeStyle = '#1e293b';
+      sCtx.lineWidth = 22;
+      sCtx.beginPath();
+      sCtx.moveTo(penstockStartX, penstockStartY);
+      sCtx.lineTo(powerhouseX, powerhouseY);
+      sCtx.stroke();
+
+      // High-Velocity Penstock Water Stream
+      if (flowRate > 0) {
+        const streamFlowGrad = sCtx.createLinearGradient(penstockStartX, penstockStartY, powerhouseX, powerhouseY);
+        streamFlowGrad.addColorStop(0, '#0284c7');
+        streamFlowGrad.addColorStop(1, '#38bdf8');
+        sCtx.strokeStyle = streamFlowGrad;
+        sCtx.lineWidth = 14;
+        sCtx.beginPath();
+        sCtx.moveTo(penstockStartX, penstockStartY);
+        sCtx.lineTo(powerhouseX, powerhouseY);
+        sCtx.stroke();
+
+        // Water Current Velocity Particles
+        const currentSpeed = (metrics.waterVelocity / 60) * (flowRate / 60) * 0.02 + 0.005;
+        sCtx.fillStyle = '#ffffff';
+
+        penstockParticles.forEach(p => {
+          p.progress = (p.progress + currentSpeed) % 1;
+          const px = penstockStartX + (powerhouseX - penstockStartX) * p.progress;
+          const py = penstockStartY + (powerhouseY - penstockStartY) * p.progress + p.offsetY;
+
+          sCtx.beginPath();
+          sCtx.arc(px, py, 2, 0, Math.PI * 2);
+          sCtx.fill();
+        });
+      }
+
+      // Intake Trash Rack / Sluice Gate Control Tower
+      sCtx.fillStyle = '#1e293b';
+      sCtx.fillRect(penstockStartX - 10, penstockStartY - 20, 16, 40);
+
+      // 5. Hydro Powerhouse Building
+      sCtx.fillStyle = '#334155';
+      sCtx.strokeStyle = '#64748b';
+      sCtx.lineWidth = 2;
+      sCtx.beginPath();
+      sCtx.roundRect(powerhouseX - 15, powerhouseY - 35, 75, 45, 6);
+      sCtx.fill();
+      sCtx.stroke();
+
+      // Powerhouse Glass Window
+      sCtx.fillStyle = smoothP > 5 ? 'rgba(56, 189, 248, 0.6)' : '#0f172a';
+      sCtx.fillRect(powerhouseX - 5, powerhouseY - 26, 22, 14);
+
+      // 6. Francis Hydro Turbine Runner (Rotating Mechanical Wheel)
+      const turbineCenterX = powerhouseX + 38;
+      const turbineCenterY = powerhouseY - 12;
+
+      sCtx.save();
+      sCtx.translate(turbineCenterX, turbineCenterY);
+      sCtx.rotate(turbineAngle);
+
+      // Turbine Blades
+      sCtx.fillStyle = '#94a3b8';
+      for (let i = 0; i < 6; i++) {
+        sCtx.rotate(Math.PI / 3);
+        sCtx.beginPath();
+        sCtx.moveTo(0, 0);
+        sCtx.quadraticCurveTo(8, -5, 4, -12);
+        sCtx.lineTo(-4, -12);
+        sCtx.fill();
+      }
+
+      // Turbine Center Axis
+      sCtx.fillStyle = '#f59e0b';
+      sCtx.beginPath();
+      sCtx.arc(0, 0, 4, 0, Math.PI * 2);
+      sCtx.fill();
+
+      sCtx.restore();
+
+      // 7. Downstream Tailrace Discharge & Turbulent Aeration Foam
+      const tailraceStartX = powerhouseX + 60;
+      const tailraceY = groundY - 14;
+
+      const tailraceGrad = sCtx.createLinearGradient(tailraceStartX, tailraceY, w, groundY);
+      tailraceGrad.addColorStop(0, '#0284c7');
+      tailraceGrad.addColorStop(1, '#0369a1');
+      sCtx.fillStyle = tailraceGrad;
+      sCtx.fillRect(tailraceStartX, tailraceY, w - tailraceStartX, groundY - tailraceY + 30);
+
+      // Foam and Discharge Bubbles
+      if (flowRate > 0) {
+        const bubbleSpeed = (flowRate / 100) * 4 + 1;
+        tailraceBubbles.forEach(b => {
+          b.x += bubbleSpeed;
+          if (b.x > w - tailraceStartX) b.x = 0;
+          
+          sCtx.fillStyle = `rgba(255, 255, 255, ${b.alpha * Math.min(1, flowRate / 30)})`;
+          sCtx.beginPath();
+          sCtx.arc(tailraceStartX + b.x, tailraceY + (b.y % 20), b.radius, 0, Math.PI * 2);
+          sCtx.fill();
+        });
+      }
+
+      // 8. Ground Foundation
+      sCtx.fillStyle = '#0f1f18';
+      sCtx.fillRect(0, groundY, w, h - groundY);
+
+      // 9. High-Voltage Transmission Line Tower & Electricity Flow
+      const towerX = w * 0.88;
+      const towerY = groundY - 70;
+
+      // Steel Pylon
+      sCtx.strokeStyle = '#94a3b8';
+      sCtx.lineWidth = 2;
+      sCtx.beginPath();
+      sCtx.moveTo(towerX, groundY);
+      sCtx.lineTo(towerX, towerY);
+      sCtx.lineTo(towerX - 18, towerY + 20);
+      sCtx.lineTo(towerX + 18, towerY + 20);
+      sCtx.lineTo(towerX, towerY);
+      sCtx.stroke();
+
+      // Power Line Cable from Powerhouse to Tower
+      sCtx.strokeStyle = '#1e293b';
+      sCtx.lineWidth = 3;
+      sCtx.beginPath();
+      sCtx.moveTo(powerhouseX + 30, powerhouseY - 35);
+      sCtx.quadraticCurveTo((powerhouseX + towerX) / 2, powerhouseY - 10, towerX, towerY + 10);
+      sCtx.lineTo(w, towerY + 10);
+      sCtx.stroke();
+
+      // Electric Transmission Pulses
+      if (smoothP > 2) {
+        wireOffset = (wireOffset + smoothP * 0.08 + 1) % 18;
+        sCtx.strokeStyle = '#34d399';
+        sCtx.lineWidth = 2;
+        sCtx.setLineDash([5, 8]);
+        sCtx.lineDashOffset = -wireOffset;
+        sCtx.beginPath();
+        sCtx.moveTo(powerhouseX + 30, powerhouseY - 35);
+        sCtx.quadraticCurveTo((powerhouseX + towerX) / 2, powerhouseY - 10, towerX, towerY + 10);
+        sCtx.lineTo(w, towerY + 10);
+        sCtx.stroke();
+        sCtx.setLineDash([]);
+      }
+
+      // 10. Record Oscillogram History
+      if (historyData.length > maxHistoryPoints) historyData.shift();
+      historyData.push({
+        v: smoothV / NOMINAL_VOLTAGE,
+        p: Math.min(1.0, smoothP / 160),
+        q: Math.min(1.0, smoothQ / 120)
+      });
+
+      renderGraph();
+      requestAnimationFrame(render);
+    }
+
+    // Oscilloscope Graph Rendering
+    function renderGraph() {
+      const gw = graphCanvas.width / window.devicePixelRatio;
+      const gh = graphCanvas.height / window.devicePixelRatio;
+
+      gCtx.clearRect(0, 0, gw, gh);
+
+      // Horizontal Grid lines
+      gCtx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      gCtx.lineWidth = 1;
+      for (let y = 0.25; y < 1; y += 0.25) {
+        gCtx.beginPath();
+        gCtx.moveTo(0, gh * y);
+        gCtx.lineTo(gw, gh * y);
+        gCtx.stroke();
+      }
+
+      function drawTrace(key, color) {
+        gCtx.strokeStyle = color;
+        gCtx.lineWidth = 2;
+        gCtx.beginPath();
+        historyData.forEach((d, idx) => {
+          const gx = (idx / (maxHistoryPoints - 1)) * gw;
+          const gy = gh - d[key] * (gh - 12) - 6;
+          if (idx === 0) gCtx.moveTo(gx, gy);
+          else gCtx.lineTo(gx, gy);
+        });
+        gCtx.stroke();
+      }
+
+      drawTrace('q', '#38bdf8'); // Water Flow Rate Q
+      drawTrace('p', '#f43f5e'); // Power MW
+      drawTrace('v', '#34d399'); // Voltage kV
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
