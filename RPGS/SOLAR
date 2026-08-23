@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solar Generation & Irradiance Simulator</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.85);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --solar-gold: #f59e0b;
+      --voltage-color: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+
+    /* Simulation Canvas Area */
+    .viewport-card {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Live Telemetry Overlay */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .stat-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .stat-value.voltage { color: var(--voltage-color); }
+    .stat-value.power { color: var(--solar-gold); }
+    .stat-value.irradiance { color: var(--accent); }
+
+    /* Control Panel */
+    .controls-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(12px);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .control-header span:last-child {
+      color: var(--accent);
+      font-family: monospace;
+      font-size: 1rem;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #334155;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+      transition: transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    button {
+      background: #334155;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #475569;
+    }
+
+    button.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Solar Generation & Irradiance Simulator</h1>
+      <p>Simulate solar panel voltage and power output under dynamic sun positions and moving cloud occlusion.</p>
+    </header>
+
+    <!-- Canvas Simulation Area -->
+    <div class="viewport-card">
+      <canvas id="simCanvas"></canvas>
+    </div>
+
+    <!-- Live Telemetry Readouts -->
+    <div class="telemetry-grid">
+      <div class="stat-card">
+        <span class="stat-title">Generated Voltage</span>
+        <span class="stat-value voltage" id="voltageDisplay">0.00 V</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-title">Power Output</span>
+        <span class="stat-value power" id="powerDisplay">0.00 W</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-title">Solar Irradiance</span>
+        <span class="stat-value irradiance" id="irradianceDisplay">0 W/m²</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-title">Incident Angle (θ)</span>
+        <span class="stat-value" id="angleDisplay">0°</span>
+      </div>
+    </div>
+
+    <!-- Interactive Control Board -->
+    <div class="controls-card">
+      <!-- Sun Direction / Time -->
+      <div class="control-group">
+        <div class="control-header">
+          <span>Sun Position / Elevation</span>
+          <span id="sunAngleVal">45°</span>
+        </div>
+        <input type="range" id="sunAngleSlider" min="0" max="180" value="45" />
+        <div class="btn-row" style="margin-top: 6px;">
+          <button id="autoSunBtn">Auto Sun Track: OFF</button>
+        </div>
+      </div>
+
+      <!-- Cloud Density & Movement -->
+      <div class="control-group">
+        <div class="control-header">
+          <span>Cloud Coverage</span>
+          <span id="cloudDensityVal">30%</span>
+        </div>
+        <input type="range" id="cloudDensitySlider" min="0" max="100" value="30" />
+        <div class="btn-row" style="margin-top: 6px;">
+          <button id="cloudMoveBtn" class="active">Cloud Motion: ON</button>
+        </div>
+      </div>
+
+      <!-- Panel Tilt -->
+      <div class="control-group">
+        <div class="control-header">
+          <span>Panel Tilt Angle</span>
+          <span id="panelTiltVal">35°</span>
+        </div>
+        <input type="range" id="panelTiltSlider" min="0" max="90" value="35" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI Elements
+    const sunAngleSlider = document.getElementById('sunAngleSlider');
+    const sunAngleVal = document.getElementById('sunAngleVal');
+    const autoSunBtn = document.getElementById('autoSunBtn');
+    const cloudDensitySlider = document.getElementById('cloudDensitySlider');
+    const cloudDensityVal = document.getElementById('cloudDensityVal');
+    const cloudMoveBtn = document.getElementById('cloudMoveBtn');
+    const panelTiltSlider = document.getElementById('panelTiltSlider');
+    const panelTiltVal = document.getElementById('panelTiltVal');
+
+    const voltageDisplay = document.getElementById('voltageDisplay');
+    const powerDisplay = document.getElementById('powerDisplay');
+    const irradianceDisplay = document.getElementById('irradianceDisplay');
+    const angleDisplay = document.getElementById('angleDisplay');
+
+    // State Variables
+    let sunElevation = 45; // Degrees (0 = Sunrise/East, 90 = Zenith, 180 = Sunset/West)
+    let autoSun = false;
+    let cloudCoverage = 30; // Percentage
+    let moveClouds = true;
+    let panelTilt = 35; // Tilt towards the equator (South/Center)
+
+    // Panel Specifications (Typical 24V Nominal Solar Module)
+    const MAX_VOLTAGE = 24.5; // Voc in Volts
+    const MAX_CURRENT = 8.5;  // Isc in Amps
+    const MAX_IRRADIANCE = 1000; // W/m² under standard test conditions (STC)
+
+    // Clouds array
+    const clouds = [
+      { x: 50, y: 70, scale: 1.1, speed: 0.35 },
+      { x: 280, y: 110, scale: 0.8, speed: 0.25 },
+      { x: 520, y: 60, scale: 1.3, speed: 0.4 },
+      { x: 750, y: 95, scale: 0.9, speed: 0.3 }
+    ];
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Event Listeners
+    sunAngleSlider.addEventListener('input', (e) => {
+      sunElevation = parseFloat(e.target.value);
+      sunAngleVal.textContent = `${Math.round(sunElevation)}°`;
+    });
+
+    cloudDensitySlider.addEventListener('input', (e) => {
+      cloudCoverage = parseFloat(e.target.value);
+      cloudDensityVal.textContent = `${Math.round(cloudCoverage)}%`;
+    });
+
+    panelTiltSlider.addEventListener('input', (e) => {
+      panelTilt = parseFloat(e.target.value);
+      panelTiltVal.textContent = `${Math.round(panelTilt)}°`;
+    });
+
+    autoSunBtn.addEventListener('click', () => {
+      autoSun = !autoSun;
+      autoSunBtn.textContent = `Auto Sun Track: ${autoSun ? 'ON' : 'OFF'}`;
+      autoSunBtn.classList.toggle('active', autoSun);
+    });
+
+    cloudMoveBtn.addEventListener('click', () => {
+      moveClouds = !moveClouds;
+      cloudMoveBtn.textContent = `Cloud Motion: ${moveClouds ? 'ON' : 'OFF'}`;
+      cloudMoveBtn.classList.toggle('active', moveClouds);
+    });
+
+    // Cloud Shape Drawer
+    function drawCloud(x, y, scale, opacity) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.9})`;
+      ctx.shadowColor = `rgba(0, 0, 0, ${opacity * 0.2})`;
+      ctx.shadowBlur = 10;
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.arc(22, -10, 22, 0, Math.PI * 2);
+      ctx.arc(44, 0, 24, 0, Math.PI * 2);
+      ctx.arc(22, 10, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function calculateSolarPhysics(sunX, sunY, panelX, panelY, w, h) {
+      // 1. Calculate Sun altitude and incidence angle
+      // Sun angle converted to radians from horizon
+      const sunRad = (sunElevation * Math.PI) / 180;
+      
+      // Panel normal vector angle relative to ground
+      const panelNormalRad = ((90 - panelTilt) * Math.PI) / 180;
+      
+      // Angle between incident sunlight and panel surface
+      const incidentAngleRad = Math.abs(sunRad - panelNormalRad);
+      const incidentAngleDeg = Math.round((incidentAngleRad * 180) / Math.PI);
+      
+      // Geometric factor: cos(incident angle)
+      let geometricFactor = Math.cos(incidentAngleRad);
+      if (sunElevation <= 0 || sunElevation >= 180 || geometricFactor < 0) {
+        geometricFactor = 0;
+      }
+
+      // 2. Cloud Ray Occlusion Test
+      let cloudOcclusion = 0;
+      const effectiveCloudAlpha = (cloudCoverage / 100);
+
+      clouds.forEach(c => {
+        // Find distance from cloud center to ray segment connecting sun and panel
+        const cx = (c.x * (w / 800));
+        const cy = c.y;
+
+        // Line-point minimum distance estimation
+        const dx = panelX - sunX;
+        const dy = panelY - sunY;
+        const lineLenSq = dx * dx + dy * dy;
+        const t = Math.max(0, Math.min(1, ((cx - sunX) * dx + (cy - sunY) * dy) / lineLenSq));
+        const projX = sunX + t * dx;
+        const projY = sunY + t * dy;
+        const dist = Math.hypot(cx - projX, cy - projY);
+
+        if (dist < 60 * c.scale) {
+          const factor = (1 - dist / (60 * c.scale));
+          cloudOcclusion = Math.min(1, cloudOcclusion + factor * effectiveCloudAlpha);
+        }
+      });
+
+      // Ambient diffuse light ensures non-zero voltage under clouds
+      const clearSkyFactor = (1 - cloudOcclusion * 0.82);
+      const effectiveIrradiance = MAX_IRRADIANCE * geometricFactor * clearSkyFactor;
+
+      // 3. Photovoltaic Characteristic Curve Equations:
+      // Voltage follows logarithmic diode equation: V ≈ Voc + Vt*ln(G/Gstc)
+      let voltage = 0;
+      let current = 0;
+      let power = 0;
+
+      if (effectiveIrradiance > 5) {
+        // Voltage saturates quickly even in lower light
+        const normG = effectiveIrradiance / MAX_IRRADIANCE;
+        voltage = MAX_VOLTAGE * (0.75 + 0.25 * Math.log10(1 + 9 * normG));
+        
+        // Current is directly proportional to incident irradiance
+        current = MAX_CURRENT * normG;
+        power = voltage * current;
+      }
+
+      return {
+        voltage: Math.max(0, voltage),
+        current: Math.max(0, current),
+        power: Math.max(0, power),
+        irradiance: Math.max(0, effectiveIrradiance),
+        incidentAngle: incidentAngleDeg,
+        cloudOcclusion
+      };
+    }
+
+    function render() {
+      const w = canvas.width / window.devicePixelRatio;
+      const h = canvas.height / window.devicePixelRatio;
+
+      // Step 1: Auto Sun Update
+      if (autoSun) {
+        sunElevation = (sunElevation + 0.15) % 180;
+        sunAngleSlider.value = sunElevation;
+        sunAngleVal.textContent = `${Math.round(sunElevation)}°`;
+      }
+
+      // Step 2: Draw Sky Gradient (Dynamically shifting from dawn to noon to dusk)
+      const sunRatio = Math.sin((sunElevation * Math.PI) / 180);
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+      
+      if (sunRatio > 0.3) {
+        // Daylight sky
+        skyGrad.addColorStop(0, '#0284c7');
+        skyGrad.addColorStop(0.7, '#38bdf8');
+        skyGrad.addColorStop(1, '#bae6fd');
+      } else {
+        // Dawn/Dusk golden-red sky
+        skyGrad.addColorStop(0, '#1e1b4b');
+        skyGrad.addColorStop(0.5, '#b45309');
+        skyGrad.addColorStop(1, '#f97316');
+      }
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Step 3: Sun Position Calculation (Arc path)
+      const sunCenterX = w / 2;
+      const sunCenterY = h * 0.9;
+      const orbitRadiusX = w * 0.42;
+      const orbitRadiusY = h * 0.65;
+
+      const sunRad = (sunElevation * Math.PI) / 180;
+      const sunX = sunCenterX - orbitRadiusX * Math.cos(sunRad);
+      const sunY = sunCenterY - orbitRadiusY * Math.sin(sunRad);
+
+      // Step 4: Solar Panel Position
+      const panelX = w / 2;
+      const panelY = h * 0.78;
+
+      // Calculate Electrical Outputs
+      const metrics = calculateSolarPhysics(sunX, sunY, panelX, panelY, w, h);
+
+      // Update UI Telemetry
+      voltageDisplay.textContent = `${metrics.voltage.toFixed(2)} V`;
+      powerDisplay.textContent = `${metrics.power.toFixed(1)} W`;
+      irradianceDisplay.textContent = `${Math.round(metrics.irradiance)} W/m²`;
+      angleDisplay.textContent = `${metrics.incidentAngle}°`;
+
+      // Step 5: Render Sunlight Rays
+      if (sunElevation > 0 && sunElevation < 180) {
+        const rayAlpha = Math.max(0.05, (metrics.irradiance / MAX_IRRADIANCE) * 0.6);
+        ctx.strokeStyle = `rgba(254, 240, 138, ${rayAlpha})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 6]);
+
+        ctx.beginPath();
+        ctx.moveTo(sunX, sunY);
+        ctx.lineTo(panelX, panelY - 10);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Step 6: Render Sun Glow & Body
+      const sunGlow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 60);
+      sunGlow.addColorStop(0, 'rgba(255, 255, 200, 1)');
+      sunGlow.addColorStop(0.3, 'rgba(251, 191, 36, 0.8)');
+      sunGlow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+
+      ctx.fillStyle = sunGlow;
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 60, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Step 7: Update & Render Clouds
+      const cloudOpacity = (cloudCoverage / 100);
+      clouds.forEach(c => {
+        if (moveClouds) {
+          c.x += c.speed;
+          if (c.x > 850) c.x = -60;
+        }
+        const cx = c.x * (w / 800);
+        drawCloud(cx, c.y, c.scale, cloudOpacity);
+      });
+
+      // Step 8: Render Ground / Horizon
+      const groundGrad = ctx.createLinearGradient(0, h * 0.75, 0, h);
+      groundGrad.addColorStop(0, '#15803d');
+      groundGrad.addColorStop(1, '#14532d');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, h * 0.78, w, h * 0.22);
+
+      // Step 9: Render Solar Panel Stand & PV Surface
+      ctx.save();
+      ctx.translate(panelX, panelY);
+
+      // Panel Stand (Mounting Bracket)
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, 35);
+      ctx.lineTo(-25, 35);
+      ctx.lineTo(25, 35);
+      ctx.stroke();
+
+      // Panel Frame & Cells (Rotated by panel tilt)
+      const tiltRad = ((panelTilt - 45) * Math.PI) / 180;
+      ctx.rotate(tiltRad);
+
+      // Shadow under panel
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+      ctx.fillRect(-72, -8, 144, 16);
+
+      // Aluminum Frame
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(-70, -10, 140, 20);
+
+      // Blue Photovoltaic Silicon Layer
+      ctx.fillStyle = metrics.voltage > 12 ? '#1e3a8a' : '#0f172a';
+      ctx.fillRect(-66, -8, 132, 16);
+
+      // Grid Lines on Solar Panel
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1;
+      for (let i = -50; i <= 50; i += 20) {
+        ctx.beginPath();
+        ctx.moveTo(i, -8);
+        ctx.lineTo(i, 8);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
