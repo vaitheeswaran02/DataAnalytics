@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tidal & Ocean Wave Power Generation Simulator</title>
+  <style>
+    :root {
+      --bg: #070d18;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --wave-cyan: #06b6d4;
+      --power-color: #f43f5e;
+      --voltage-color: #34d399;
+      --tide-gold: #fbbf24;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #38bdf8, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-family: monospace;
+    }
+
+    /* Simulation Viewport */
+    .viewport-card {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border);
+      background: #020617;
+    }
+
+    canvas#simCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Telemetry HUD Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .stat-card.v-card::after { background: var(--voltage-color); }
+    .stat-card.p-card::after { background: var(--power-color); }
+    .stat-card.w-card::after { background: var(--wave-cyan); }
+    .stat-card.t-card::after { background: var(--tide-gold); }
+
+    .stat-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 1.65rem;
+      font-weight: 800;
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.voltage { color: var(--voltage-color); }
+    .stat-value.power { color: var(--power-color); }
+    .stat-value.wave { color: var(--wave-cyan); }
+    .stat-value.tide { color: var(--tide-gold); }
+
+    /* Dashboard Split */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 860px) {
+      .dashboard-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .control-header span:last-child {
+      color: var(--accent);
+      font-family: monospace;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+    }
+
+    .btn-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: #334155;
+    }
+
+    button.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+
+    /* Live Scope Canvas */
+    .graph-container {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      border-radius: 8px;
+      background: #070a12;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    canvas#graphCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Ocean Wave & Tidal Stream Generator</h1>
+      <span class="status-badge" id="genStatus">STATUS: ACTIVE GENERATION</span>
+    </header>
+
+    <!-- Canvas Simulation Viewport -->
+    <div class="viewport-card">
+      <canvas id="simCanvas"></canvas>
+    </div>
+
+    <!-- Live Telemetry Grid -->
+    <div class="telemetry-grid">
+      <div class="stat-card v-card">
+        <span class="stat-title">Generated Voltage</span>
+        <span class="stat-value voltage" id="voltageDisplay">0.00 V</span>
+      </div>
+      <div class="stat-card p-card">
+        <span class="stat-title">Hydroelectric Power</span>
+        <span class="stat-value power" id="powerDisplay">0.00 kW</span>
+      </div>
+      <div class="stat-card w-card">
+        <span class="stat-title">Wave Height (H)</span>
+        <span class="stat-value wave" id="waveHeightDisplay">2.5 m</span>
+      </div>
+      <div class="stat-card t-card">
+        <span class="stat-title">Tidal Current Speed</span>
+        <span class="stat-value tide" id="tideSpeedDisplay">2.2 m/s</span>
+      </div>
+    </div>
+
+    <!-- Controls & Real-Time Graph -->
+    <div class="dashboard-split">
+      <div class="panel-card">
+        <!-- Wave Height / Amplitude -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Wave Height / Amplitude (H)</span>
+            <span id="waveHeightVal">2.5 m</span>
+          </div>
+          <input type="range" id="waveHeightSlider" min="0.2" max="6.0" value="2.5" step="0.1" />
+        </div>
+
+        <!-- Wave Frequency / Period -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Wave Period (T)</span>
+            <span id="wavePeriodVal">8.0 s</span>
+          </div>
+          <input type="range" id="wavePeriodSlider" min="4.0" max="16.0" value="8.0" step="0.5" />
+        </div>
+
+        <!-- Tidal Stream Current Speed -->
+        <div class="control-group">
+          <div class="control-header">
+            <span>Subsea Tidal Current Velocity</span>
+            <span id="tideSpeedVal">2.2 m/s</span>
+          </div>
+          <input type="range" id="tideSpeedSlider" min="0.0" max="5.0" value="2.2" step="0.1" />
+        </div>
+
+        <!-- Sea State Presets -->
+        <div class="control-group">
+          <div class="control-header"><span>Sea State Presets</span></div>
+          <div class="btn-wrap">
+            <button onclick="setSeaState(0.5, 5, 0.5)">Calm Harbor</button>
+            <button onclick="setSeaState(2.5, 8, 2.2)">Moderate Swell</button>
+            <button onclick="setSeaState(4.2, 11, 3.8)">Rough Spring Tide</button>
+            <button onclick="setSeaState(6.0, 14, 4.8)">Severe Storm Surge</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Graph Card -->
+      <div class="panel-card">
+        <div class="control-header">
+          <span>Real-time Wave & Power Oscillogram</span>
+          <span style="font-size:0.75rem; color:#94a3b8;">
+            <span style="color:var(--voltage-color)">― V</span> &nbsp;
+            <span style="color:var(--power-color)">― kW</span> &nbsp;
+            <span style="color:var(--wave-cyan)">― Wave (m)</span>
+          </span>
+        </div>
+        <div class="graph-container">
+          <canvas id="graphCanvas"></canvas>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Hydrodynamic Model:</strong> Combines linear Airy wave theory for wave energy flux $P_{\text{wave}} = \frac{\rho g^2}{64\pi} H^2 T$ and subsea kinetic turbine power $P_{\text{tide}} = \frac{1}{2} \rho A v^3 C_p$.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const simCanvas = document.getElementById('simCanvas');
+    const sCtx = simCanvas.getContext('2d');
+    const graphCanvas = document.getElementById('graphCanvas');
+    const gCtx = graphCanvas.getContext('2d');
+
+    // UI elements
+    const waveHeightSlider = document.getElementById('waveHeightSlider');
+    const waveHeightVal = document.getElementById('waveHeightVal');
+    const wavePeriodSlider = document.getElementById('wavePeriodSlider');
+    const wavePeriodVal = document.getElementById('wavePeriodVal');
+    const tideSpeedSlider = document.getElementById('tideSpeedSlider');
+    const tideSpeedVal = document.getElementById('tideSpeedVal');
+
+    const voltageDisplay = document.getElementById('voltageDisplay');
+    const powerDisplay = document.getElementById('powerDisplay');
+    const waveHeightDisplay = document.getElementById('waveHeightDisplay');
+    const tideSpeedDisplay = document.getElementById('tideSpeedDisplay');
+    const genStatus = document.getElementById('genStatus');
+
+    // Hydrodynamic Constants
+    const WATER_DENSITY = 1025; // Seawater kg/m³
+    const GRAVITY = 9.81;
+    const TURBINE_RADIUS = 6.0; // Subsea rotor radius (meters)
+    const MAX_VOLTAGE = 690;    // 690V AC Generator nominal
+    const EFFICIENCY = 0.85;
+
+    // Simulation Variables
+    let waveHeight = 2.5;  // meters (peak-to-trough)
+    let wavePeriod = 8.0;  // seconds
+    let tideSpeed = 2.2;   // m/s
+
+    let simTime = 0;
+    let turbineAngle = 0;
+    let smoothV = 0, smoothP = 0;
+
+    // Subsea stream particles
+    const currentParticles = [];
+    for (let i = 0; i < 70; i++) {
+      currentParticles.push({
+        x: Math.random() * 1000,
+        y: 200 + Math.random() * 200,
+        speedFactor: 0.7 + Math.random() * 0.6,
+        length: 15 + Math.random() * 30,
+        alpha: 0.2 + Math.random() * 0.5
+      });
+    }
+
+    // Oscillogram data buffer
+    const historyData = [];
+    const maxHistoryPoints = 120;
+
+    function resizeCanvases() {
+      const sRect = simCanvas.getBoundingClientRect();
+      simCanvas.width = sRect.width * window.devicePixelRatio;
+      simCanvas.height = sRect.height * window.devicePixelRatio;
+      sCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const gRect = graphCanvas.getBoundingClientRect();
+      graphCanvas.width = gRect.width * window.devicePixelRatio;
+      graphCanvas.height = gRect.height * window.devicePixelRatio;
+      gCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvases);
+    resizeCanvases();
+
+    // Event Listeners
+    waveHeightSlider.addEventListener('input', (e) => {
+      waveHeight = parseFloat(e.target.value);
+      waveHeightVal.textContent = `${waveHeight.toFixed(1)} m`;
+    });
+
+    wavePeriodSlider.addEventListener('input', (e) => {
+      wavePeriod = parseFloat(e.target.value);
+      wavePeriodVal.textContent = `${wavePeriod.toFixed(1)} s`;
+    });
+
+    tideSpeedSlider.addEventListener('input', (e) => {
+      tideSpeed = parseFloat(e.target.value);
+      tideSpeedVal.textContent = `${tideSpeed.toFixed(1)} m/s`;
+    });
+
+    window.setSeaState = function(h, t, v) {
+      waveHeight = h;
+      wavePeriod = t;
+      tideSpeed = v;
+      waveHeightSlider.value = h;
+      waveHeightVal.textContent = `${h.toFixed(1)} m`;
+      wavePeriodSlider.value = t;
+      wavePeriodVal.textContent = `${t.toFixed(1)} s`;
+      tideSpeedSlider.value = v;
+      tideSpeedVal.textContent = `${v.toFixed(1)} m/s`;
+    };
+
+    // Hydrodynamic Physics Calculation
+    function calculateHydrodynamics() {
+      // 1. Wave Energy Flux (Airy Wave Theory): P_wave = (rho * g^2 / (64 * pi)) * H^2 * T
+      const wavePowerPerMeter = (WATER_DENSITY * Math.pow(GRAVITY, 2) / (64 * Math.PI)) * Math.pow(waveHeight, 2) * wavePeriod;
+      const wavePowerKW = (wavePowerPerMeter * 8) / 1000; // Assuming an 8-meter capture width (OWC / Point Absorber)
+
+      // 2. Subsea Tidal Turbine Kinetic Power: P_tide = 0.5 * rho * A * v^3 * Cp
+      const sweptArea = Math.PI * Math.pow(TURBINE_RADIUS, 2);
+      const tidalPowerWatts = 0.5 * WATER_DENSITY * sweptArea * Math.pow(tideSpeed, 3) * 0.42;
+      const tidalPowerKW = tidalPowerWatts / 1000;
+
+      // 3. Combined Total Power Output
+      const totalPowerKW = (wavePowerKW + tidalPowerKW) * EFFICIENCY;
+
+      // 4. Generator Voltage Dynamics
+      const targetVoltage = totalPowerKW > 2 ? MAX_VOLTAGE * (0.8 + 0.2 * Math.min(1.0, totalPowerKW / 1200)) : 0;
+
+      return {
+        wavePowerKW,
+        tidalPowerKW,
+        totalPowerKW,
+        targetVoltage
+      };
+    }
+
+    let wireOffset = 0;
+
+    // Simulation Render Loop
+    function render() {
+      const w = simCanvas.width / window.devicePixelRatio;
+      const h = simCanvas.height / window.devicePixelRatio;
+
+      simTime += 0.035;
+      const metrics = calculateHydrodynamics();
+
+      // Damping
+      smoothV += (metrics.targetVoltage - smoothV) * 0.08;
+      smoothP += (metrics.totalPowerKW - smoothP) * 0.08;
+
+      // Rotate subsea turbine based on water velocity
+      turbineAngle += tideSpeed * 0.04;
+
+      // Update UI Telemetry
+      voltageDisplay.textContent = `${smoothV.toFixed(1)} V`;
+      powerDisplay.textContent = `${smoothP.toFixed(1)} kW`;
+      waveHeightDisplay.textContent = `${waveHeight.toFixed(1)} m`;
+      tideSpeedDisplay.textContent = `${tideSpeed.toFixed(1)} m/s`;
+
+      if (smoothP > 500) {
+        genStatus.textContent = 'STATUS: PEAK TIDAL GENERATION';
+        genStatus.style.color = '#38bdf8';
+      } else if (smoothP > 20) {
+        genStatus.textContent = 'STATUS: ACTIVE GENERATION';
+        genStatus.style.color = '#34d399';
+      } else {
+        genStatus.textContent = 'STATUS: LOW SLACK WATER';
+        genStatus.style.color = '#94a3b8';
+      }
+
+      // 1. Sky & Atmospheric Background
+      const skyGrad = sCtx.createLinearGradient(0, 0, 0, h * 0.4);
+      skyGrad.addColorStop(0, '#040d1a');
+      skyGrad.addColorStop(1, '#0c2340');
+      sCtx.fillStyle = skyGrad;
+      sCtx.fillRect(0, 0, w, h);
+
+      // 2. Seafloor Bed
+      const seabedY = h * 0.86;
+      const seabedGrad = sCtx.createLinearGradient(0, seabedY, 0, h);
+      seabedGrad.addColorStop(0, '#0f1f1d');
+      seabedGrad.addColorStop(1, '#060d0c');
+      sCtx.fillStyle = seabedGrad;
+      sCtx.fillRect(0, seabedY, w, h - seabedY);
+
+      // 3. Subsea Tidal Current Streamlines
+      currentParticles.forEach(p => {
+        p.x += (tideSpeed * 2.2 + 0.5) * p.speedFactor;
+        if (p.x > w + 60) {
+          p.x = -60;
+          p.y = h * 0.45 + Math.random() * (h * 0.38);
+        }
+
+        sCtx.strokeStyle = `rgba(6, 182, 212, ${p.alpha * Math.min(1, tideSpeed / 2)})`;
+        sCtx.lineWidth = 1.8;
+        sCtx.beginPath();
+        sCtx.moveTo(p.x, p.y);
+        sCtx.lineTo(p.x + p.length * (tideSpeed / 2 + 0.4), p.y);
+        sCtx.stroke();
+      });
+
+      // 4. Subsea Tidal Turbine Structure
+      const turbineX = w * 0.32;
+      const hubY = h * 0.68;
+      const bladePx = TURBINE_RADIUS * 6.2;
+
+      // Foundation Pylon
+      sCtx.fillStyle = '#334155';
+      sCtx.fillRect(turbineX - 8, hubY, 16, seabedY - hubY);
+
+      // Generator Nacelle
+      sCtx.fillStyle = '#64748b';
+      sCtx.beginPath();
+      sCtx.roundRect(turbineX - 22, hubY - 12, 44, 24, 6);
+      sCtx.fill();
+
+      // Rotating Hydro-Blades
+      sCtx.save();
+      sCtx.translate(turbineX, hubY);
+      sCtx.rotate(turbineAngle);
+
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * 2 * Math.PI) / 3;
+        sCtx.save();
+        sCtx.rotate(angle);
+        
+        // Blade geometry
+        sCtx.fillStyle = '#94a3b8';
+        sCtx.beginPath();
+        sCtx.moveTo(0, 0);
+        sCtx.quadraticCurveTo(8, -bladePx * 0.5, 3, -bladePx);
+        sCtx.lineTo(-3, -bladePx);
+        sCtx.quadraticCurveTo(-6, -bladePx * 0.5, 0, 0);
+        sCtx.fill();
+
+        // Tip marker
+        sCtx.fillStyle = '#38bdf8';
+        sCtx.fillRect(-3, -bladePx, 6, 8);
+
+        sCtx.restore();
+      }
+
+      // Hub Cap
+      sCtx.fillStyle = '#0f172a';
+      sCtx.beginPath();
+      sCtx.arc(0, 0, 9, 0, Math.PI * 2);
+      sCtx.fill();
+      sCtx.restore();
+
+      // 5. Floating Point-Absorber Wave Buoy (Surface Generator)
+      const buoyX = w * 0.72;
+      const waveFreq = (2 * Math.PI) / wavePeriod;
+      const buoySurfaceY = h * 0.36 + Math.sin(simTime * waveFreq * 2 + 1) * (waveHeight * 10);
+
+      // Mooring / Linear Generator Tether
+      sCtx.strokeStyle = '#475569';
+      sCtx.lineWidth = 4;
+      sCtx.beginPath();
+      sCtx.moveTo(buoyX, buoySurfaceY + 20);
+      sCtx.lineTo(buoyX, seabedY);
+      sCtx.stroke();
+
+      // Linear Power Take-Off (PTO) Cylinder on Seabed
+      sCtx.fillStyle = '#1e293b';
+      sCtx.fillRect(buoyX - 14, seabedY - 50, 28, 50);
+      sCtx.fillStyle = '#38bdf8';
+      sCtx.fillRect(buoyX - 6, seabedY - 45, 12, 40);
+
+      // Yellow High-Visibility Wave Buoy Body
+      sCtx.fillStyle = '#f59e0b';
+      sCtx.beginPath();
+      sCtx.roundRect(buoyX - 35, buoySurfaceY - 15, 70, 32, 10);
+      sCtx.fill();
+
+      // Buoy Beacon Light
+      sCtx.fillStyle = '#ef4444';
+      sCtx.beginPath();
+      sCtx.arc(buoyX, buoySurfaceY - 22, 5, 0, Math.PI * 2);
+      sCtx.fill();
+
+      // 6. Dynamic Ocean Surface Waves (Sine superposition)
+      sCtx.fillStyle = 'rgba(6, 182, 212, 0.45)';
+      sCtx.beginPath();
+      sCtx.moveTo(0, h);
+
+      const meanWaterY = h * 0.36;
+      for (let x = 0; x <= w; x += 6) {
+        const k = 0.015; // Wavelength factor
+        const waveY = meanWaterY 
+          + Math.sin(x * k + simTime * waveFreq * 2) * (waveHeight * 10)
+          + Math.cos(x * 0.03 - simTime) * 3;
+
+        if (x === 0) sCtx.lineTo(x, waveY);
+        else sCtx.lineTo(x, waveY);
+      }
+      sCtx.lineTo(w, h);
+      sCtx.closePath();
+      sCtx.fill();
+
+      // Primary Deep Water Layer
+      const waterGrad = sCtx.createLinearGradient(0, meanWaterY, 0, h);
+      waterGrad.addColorStop(0, 'rgba(3, 105, 161, 0.7)');
+      waterGrad.addColorStop(0.5, 'rgba(12, 74, 110, 0.85)');
+      waterGrad.addColorStop(1, 'rgba(2, 44, 75, 0.95)');
+      sCtx.fillStyle = waterGrad;
+
+      sCtx.beginPath();
+      sCtx.moveTo(0, h);
+      for (let x = 0; x <= w; x += 6) {
+        const k = 0.015;
+        const waveY = meanWaterY + Math.sin(x * k + simTime * waveFreq * 2) * (waveHeight * 10);
+        if (x === 0) sCtx.lineTo(x, waveY);
+        else sCtx.lineTo(x, waveY);
+      }
+      sCtx.lineTo(w, h);
+      sCtx.closePath();
+      sCtx.fill();
+
+      // 7. Subsea Power Cables & Transmission Pulses
+      sCtx.strokeStyle = '#0f172a';
+      sCtx.lineWidth = 4;
+      sCtx.beginPath();
+      sCtx.moveTo(turbineX, seabedY);
+      sCtx.lineTo(buoyX, seabedY);
+      sCtx.lineTo(w, seabedY);
+      sCtx.stroke();
+
+      if (smoothP > 5) {
+        wireOffset = (wireOffset + smoothP * 0.006 + 1.2) % 20;
+        sCtx.strokeStyle = '#34d399';
+        sCtx.lineWidth = 2.5;
+        sCtx.setLineDash([6, 10]);
+        sCtx.lineDashOffset = -wireOffset;
+        sCtx.beginPath();
+        sCtx.moveTo(turbineX, seabedY);
+        sCtx.lineTo(buoyX, seabedY);
+        sCtx.lineTo(w, seabedY);
+        sCtx.stroke();
+        sCtx.setLineDash([]);
+      }
+
+      // 8. Update Oscillogram Data
+      if (historyData.length > maxHistoryPoints) historyData.shift();
+      const currentWaveInstant = Math.sin(simTime * waveFreq * 2) * waveHeight;
+      historyData.push({
+        v: smoothV / MAX_VOLTAGE,
+        p: Math.min(1.0, smoothP / 1500),
+        w: (currentWaveInstant + 6) / 12
+      });
+
+      renderGraph();
+      requestAnimationFrame(render);
+    }
+
+    // Oscilloscope Graph Rendering
+    function renderGraph() {
+      const gw = graphCanvas.width / window.devicePixelRatio;
+      const gh = graphCanvas.height / window.devicePixelRatio;
+
+      gCtx.clearRect(0, 0, gw, gh);
+
+      // Grid
+      gCtx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      gCtx.lineWidth = 1;
+      for (let y = 0.25; y < 1; y += 0.25) {
+        gCtx.beginPath();
+        gCtx.moveTo(0, gh * y);
+        gCtx.lineTo(gw, gh * y);
+        gCtx.stroke();
+      }
+
+      function drawTrace(key, color) {
+        gCtx.strokeStyle = color;
+        gCtx.lineWidth = 2;
+        gCtx.beginPath();
+        historyData.forEach((d, idx) => {
+          const gx = (idx / (maxHistoryPoints - 1)) * gw;
+          const gy = gh - d[key] * (gh - 12) - 6;
+          if (idx === 0) gCtx.moveTo(gx, gy);
+          else gCtx.lineTo(gx, gy);
+        });
+        gCtx.stroke();
+      }
+
+      drawTrace('w', '#06b6d4'); // Wave amplitude
+      drawTrace('p', '#f43f5e'); // Power kW
+      drawTrace('v', '#34d399'); // Voltage V
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
