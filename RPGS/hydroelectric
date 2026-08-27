@@ -394,6 +394,7 @@
     }
 
     // Oscillogram historical buffer
+
     const historyData = [];
     const maxHistoryPoints = 120;
 
@@ -515,6 +516,7 @@
       sCtx.fill();
 
       // 2. Concrete Gravity Dam Geometry
+
       const damTopX = w * 0.35;
       const damBaseLeftX = w * 0.28;
       const damBaseRightX = w * 0.65;
@@ -542,6 +544,7 @@
 
       // 3. Upstream Reservoir Water
       // Water level scales dynamically with Reservoir Head Height
+
       const reservoirLevelY = damTopY + (150 - headHeight) * 0.85;
       
       const waterGrad = sCtx.createLinearGradient(0, reservoirLevelY, 0, groundY);
