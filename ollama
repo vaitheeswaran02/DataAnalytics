@@ -1,0 +1,17 @@
+to run ollama to finsh task 
+
+commands:
+sudo apt-get update
+sudo apt-get install -y zstd
+curl -fsSL https://ollama.com/install.sh | sh
+npm install -g @anthropic-ai/claude-code
+ollama serve
+=============================
+
+npm uninstall -g @anthropic-ai/claude-code
+==============
+npm install -g @anthropic-ai/claude-code --allow-scripts=@anthropic-ai/claude-code
+=====================================================================================================
+
+npm config set allow-scripts=@anthropic-ai/claude-code --location=user
+===============================================================================
